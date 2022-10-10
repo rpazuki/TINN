@@ -109,7 +109,7 @@ def Circuit_3954(c, t, f_args):
     fB = b_B + Hill_inv(U, K_AB/K_1) * Hill(E, K_EB) - μ_B * B
     fC = b_C + Hill(D, K_DA) - μ_C * C
     fD = b_D + Hill_inv(V, K_BD/K_2) - μ_D * D
-    fE = b_E + Hill(C, (1+ K_d * Atc**n_Atc) * K_CE) * Hill(D, K_DA) * Hill_inv(E, K_EE) - μ_E * E
+    fE = b_E + Hill(C, (1+  (Atc**n_Atc)/K_d) * K_CE) * Hill(D, K_DA) * Hill_inv(E, K_EE) - μ_E * E
     fF = b_F + Hill_inv(V, K_BD/K_2) - μ_F * F
     fAtc = -μ_Atc * Atc
 

@@ -120,7 +120,7 @@ def Circuit_3954(c, f_args, z):
     elif z == 5:
         return b_D + Hill_inv(V, K_BD/K_2) - μ_D * D
     elif z == 6:
-        return b_E + Hill(C, (1+ K_d * Atc**n_Atc) * K_CE) * Hill(D, K_DA) * Hill_inv(E, K_EE) - μ_E * E
+        return b_E + Hill(C, (1+  (Atc**n_Atc)/K_d) * K_CE) * Hill(D, K_DA) * Hill_inv(E, K_EE) - μ_E * E
     elif z == 7:
         return b_F + Hill_inv(V, K_BD/K_2) - μ_F * F
     elif z == 8:
