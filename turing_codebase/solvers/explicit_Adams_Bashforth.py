@@ -24,13 +24,16 @@ def integrate(c0, t, dt, n, L, Ds, f, f_args):
                     j_prev = (j - 1) % n[1]
                     j_next = (j + 1) % n[1]
                     for k in range(c_num):
-                        dc_1[k, i, j] = (Ds[k] * n[k] / L[k]) * (
-                            c_c[k, i_prev, j]
-                            + c_c[k, i_next, j]
-                            + c_c[k, i, j_prev]
-                            + c_c[k, i, j_next]
-                            - 4.0 * c_c[k, i, j]
-                        ) + f_f[k, i, j]
+                        if Ds[k] != 0:
+                            dc[k, i, j] = (Ds[k] * n[k] / L[k]) * (
+                                               c_c[k, i_prev, j]
+                                             + c_c[k, i_next, j]
+                                             + c_c[k, i, j_prev]
+                                             + c_c[k, i, j_next]
+                                             - 4.0 * c_c[k, i, j]
+                                            ) + f_f[k, i, j]
+                        else:
+                            dc[k, i, j] = f_f[k, i, j]
 
             # c_c += dt * dc
             if dc_2 is None:

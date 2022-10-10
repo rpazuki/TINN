@@ -61,10 +61,12 @@ def create_GPU(f):
         j_next = (y + 1) % n[1]
 
         fuv = f(c0[:, x, y], f_args, z)
-
-        dc[z, x, y] = (Ds[z] * n[z] / L[z]) * (
-            c0[z, i_prev, y] + c0[z, i_next, y] + c0[z, x, j_prev] + c0[z, x, j_next] - 4.0 * c0[z, x, y]
-        ) + fuv
+        if Ds[z] != 0:
+            dc[z, x, y] = (Ds[z] * n[z] / L[z]) * (
+                 c0[z, i_prev, y] + c0[z, i_next, y] + c0[z, x, j_prev] + c0[z, x, j_next] - 4.0 * c0[z, x, y]
+             ) + fuv
+        else:
+            dc[z, x, y] = fuv
 
     return RHS_GPU
 

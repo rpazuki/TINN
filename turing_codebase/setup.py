@@ -6,9 +6,11 @@ from distutils.core import setup
 setup(
     name="turing",
     packages=[
+        "solvers.gpu",
         "solvers.explicit_Euler",
         "solvers.explicit_Adams_Bashforth",
         "turing_models",
+        "utils",
     ],
     include_package_data=True,
     version="0.0.1",

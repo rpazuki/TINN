@@ -13,21 +13,21 @@ import numba
 #     fv = -u + mu * v - v * v * v
 #     return np.stack((fu, fv))
 
-#  $\partial_t u = D_u (\partial_x^2 + \partial_y^2)u + \mu u - u^3 - v + \sigma$
+#  $\partial_t u = D_u (\partial_x^2 + \partial_y^2)u + \mu u - u^3 - v $
 #  $\partial_t v = D_v (\partial_x^2 + \partial_y^2)v +bu - \gamma v $
 @numba.jit(nopython=True)
 def FitzHugh_Nagumo(c, t, f_args):
-    sigma, b, gamma, mu = f_args
+    alpha, epsilon, mu = f_args
     u = c[0, :, :]
     v = c[1, :, :]
-    fu = mu * u - u * u * u - v + sigma
-    fv = b * u - gamma * v
+    fu = epsilon * ( v - alpha * u)
+    fv = -u + mu * v - u**3
     return np.stack((fu, fv))
 
 
-def FitzHugh_Nagumo_steady_state(sigma, b, gamma, mu, init_u=1.0, it=100):
+def FitzHugh_Nagumo_steady_state(b, gamma, mu, init_u=1.0, it=100):
     def F(u):
-        return u * u * u - (mu - (b / gamma)) * u - sigma
+        return u * u * u - (mu - (b / gamma)) * u 
 
     def F_prime(u):
         return 3.0 * u * u - (mu - (b / gamma))
@@ -55,7 +55,7 @@ def Schnakenberg(c, t, f_args):
 # $\partial_t v = D_s (\partial_x^2 + \partial_y^2)v - \rho_v\frac{u^2 v}{1 + \kappa_u u^2} + \sigma_v$
 @numba.jit(nopython=True)
 def Koch_Meinhardt(c, t, f_args):
-    sigma_u, sigma_v, rho_u, rho_v, kappa_u, mu_u = f_args
+    kappa_u, mu_u, rho_u, rho_v, sigma_u, sigma_v = f_args
     u = c[0, :, :]
     v = c[1, :, :]
     u2 = u**2
@@ -78,3 +78,40 @@ def Brusselator(c, t, f_args):
     fu = A - (B + 1) * u + u2v
     fv = B * u - u2v
     return np.stack((fu, fv))
+
+@numba.jit(nopython=True)
+def Circuit_3954(c, t, f_args):
+    (b_A, b_B, b_C, b_D, b_E, b_F, 
+    n_Atc,
+    K_1, K_2, K_d,
+    K_AB, K_BD, K_CE, K_DA, K_EB, K_EE,
+    μ_U, μ_V, μ_A, μ_B, μ_C, μ_D, μ_E, μ_F, μ_Atc) =  f_args
+
+    u = c[0, :, :]
+    v = c[1, :, :]
+    A = c[2, :, :]
+    B = c[3, :, :]
+    C = c[4, :, :]
+    D = c[5, :, :]
+    E = c[6, :, :]
+    F = c[7, :, :]
+    Atc = c[8, :, :]
+
+    def Hill(x, capacity, n=2):
+        return 1/(1 + (x/capacity)**n)
+        
+    def Hill_inv(x, capacity, n=2):
+        return 1/(1 + (capacity/x)**n)
+
+    fU = A - μ_U * U 
+    fV = B - μ_V * V
+    fA = b_A + Hill(D, K_DA) - μ_A * A
+    fB = b_B + Hill_inv(U, K_AB/K_1) * Hill(E, K_EB) - μ_B * B
+    fC = b_C + Hill(D, K_DA) - μ_C * C
+    fD = b_D + Hill_inv(V, K_BD/K_2) - μ_D * D
+    fE = b_E + Hill(C, (1+ K_d * Atc**n_Atc) * K_CE) * Hill(D, K_DA) * Hill_inv(E, K_EE) - μ_E * E
+    fF = b_F + Hill_inv(V, K_BD/K_2) - μ_F * F
+    fAtc = -μ_Atc * Atc
+
+    return np.stack((fU, fV, fA, fB, fC, fD, fE, fF, fAtc))
+
