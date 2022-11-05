@@ -3,7 +3,10 @@ import numpy as np
 import math
 
 
-def integrate(c0, t, dt, n, L, Ds, f, f_args, order):
+def integrate(c0, t, dt, n, L, Ds, f, f_args, order, dt_arr = None):
+    if dt_arr is not None:
+        assert len(t) == len(dt_arr)
+
     threadsperblock = (2, 4, 4)
     blockspergrid_x = math.ceil(c0.shape[0] / threadsperblock[0])
     blockspergrid_y = math.ceil(c0.shape[1] / threadsperblock[1])
@@ -29,15 +32,18 @@ def integrate(c0, t, dt, n, L, Ds, f, f_args, order):
     for i in range(1, order):
         RHS_GPU[blockspergrid, threadsperblock](d_c, d_n, d_L, d_Ds, d_f_args, d_dc_arr[i])
         forward_GPU(d_c, dt, blockspergrid, threadsperblock, i, *d_dc_arr[1 : i + 1])
-
+    if dt_arr is not None:
+        dt = dt_arr[0]
     for t_i, t_next in enumerate(t[1:]):
-        while t_c < t_next:
+        while t_c <= t_next:
             RHS_GPU[blockspergrid, threadsperblock](d_c, d_n, d_L, d_Ds, d_f_args, d_dc_arr[0])
             forward_GPU(d_c, dt, blockspergrid, threadsperblock, order, *d_dc_arr)
             t_c += dt
             # Shift all the elements to left
             d_dc_arr = [d_dc_arr[-1]] + d_dc_arr[:-1]
         assign_GPU[blockspergrid, threadsperblock](d_ret, d_c, t_i + 1)
+        if dt_arr is not None:
+            dt = dt_arr[t_i]
     d_ret.copy_to_host(ret)
     return ret
 
@@ -59,10 +65,10 @@ def create_GPU(f):
 
         j_prev = (y - 1) % n[1]
         j_next = (y + 1) % n[1]
-
+        dxdy = (n[0] * n[1]) / (L[0] * L[1])
         fuv = f(c0[:, x, y], f_args, z)
         if Ds[z] != 0:
-            dc[z, x, y] = (Ds[z] * n[z] / L[z]) * (
+            dc[z, x, y] = (Ds[z] * dxdy) * (
                  c0[z, i_prev, y] + c0[z, i_next, y] + c0[z, x, j_prev] + c0[z, x, j_next] - 4.0 * c0[z, x, y]
              ) + fuv
         else:

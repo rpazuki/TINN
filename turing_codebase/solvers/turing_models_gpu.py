@@ -53,23 +53,26 @@ from numba import cuda
 
 # # $\partial_t u = D_a (\partial_x^2 + \partial_y^2)u + \rho_u \frac{u^2 v}{1 + \kappa_u u^2} - \mu_u u + \sigma_u$
 # # $\partial_t v = D_s (\partial_x^2 + \partial_y^2)v - \rho_v\frac{u^2 v}{1 + \kappa_u u^2} + \sigma_v$
-# @numba.jit(nopython=True)
-# def Koch_Meinhardt(c, t, f_args):
-#     sigma_u, sigma_v, rho_u, rho_v, kappa_u, mu_u = f_args
-#     u = c[0, :, :]
-#     v = c[1, :, :]
-#     u2 = u**2
-#     u2v = u2 * v
-#     u2v_u2 = u2v / (1.0 + kappa_u * u2)
-#     fu = rho_u * u2v_u2 - mu_u * u + sigma_u
-#     fv = -rho_v * u2v_u2 + sigma_v
-#     return np.stack((fu, fv))
+@cuda.jit(nopython=True)
+def Koch_Meinhardt(c, f_args, z):
+    kappa_u, mu_u, rho_u, rho_v, sigma_u, sigma_v   = f_args
+    u = c[0]
+    v = c[1]
+    u2 = u**2
+    u2v = u2 * v
+    u2v_u2 = u2v / (1.0 + kappa_u * u2)
+    if z == 0:
+        return rho_u * u2v_u2 - mu_u * u + sigma_u
+    elif z==1:
+        return -rho_v * u2v_u2 + sigma_v
+    else:
+        assert "Wrong number of species"
 
 
 #  $\partial_t u = D_u (\partial_x^2 + \partial_y^2)u + A - (B+1)u + u^2v$
 #  $\partial_t v = D_v (\partial_x^2 + \partial_y^2)v + Bu - u^2 v$
 @cuda.jit
-def Brusselator_GPU(c, f_args, z):
+def Brusselator(c, f_args, z):
     A, B = f_args
     u = c[0]
     v = c[1]
@@ -79,51 +82,54 @@ def Brusselator_GPU(c, f_args, z):
         return A - (B + 1) * u + u2v
     elif z==1:
         return B * u - u2v
-    else:        
+    else:
         assert "Wrong number of species"
 
 
 @cuda.jit
 def Circuit_3954(c, f_args, z):
-    (b_A, b_B, b_C, b_D, b_E, b_F, 
-    n_Atc,
-    K_1, K_2, K_d,
-    K_AB, K_BD, K_CE, K_DA, K_EB, K_EE,
-    μ_U, μ_V, μ_A, μ_B, μ_C, μ_D, μ_E, μ_F, μ_Atc) =  f_args
+    (b_A, b_B, b_C, b_D, b_E, b_F,
+    n_aTc,
+    K_AB, K_BD, K_CE, K_DA, K_EB, K_EE, K_FE, K_aTc,
+    μ_U, μ_V, μ_B, μ_C, μ_D, μ_E, μ_F, μ_aTc) =  f_args
 
-    u = c[0, :, :]
-    v = c[1, :, :]
+    U = c[0, :, :]
+    V = c[1, :, :]
     A = c[2, :, :]
     B = c[3, :, :]
     C = c[4, :, :]
     D = c[5, :, :]
     E = c[6, :, :]
     F = c[7, :, :]
-    Atc = c[8, :, :]
+    aTc = c[8, :, :]
 
-    def Hill(x, capacity, n=2):
-        return 1/(1 + (x/capacity)**n)
-        
-    def Hill_inv(x, capacity, n=2):
-        return 1/(1 + (capacity/x)**n)
+    def activate(Concentration, K, power=3):
+            act = 1 / (1 + (K / (Concentration + 1e-20)) ** power)
+            return act
+
+    def inhibit(Concentration, K, power=3):
+        inh = 1 / (1 + (Concentration / (K + 1e-20)) ** power)
+        return inh
+
 
     if z == 0:
-        return A - μ_U * U 
+        return A - μ_U * U
     elif z == 1:
         return   B - μ_V * V
     elif z == 2:
-        return b_A + Hill(D, K_DA) - μ_A * A
+        return b_A**2 + b_A * inhibit(D, K_DA) - A
     elif z == 3:
-        return b_B + Hill_inv(U, K_AB/K_1) * Hill(E, K_EB) - μ_B * B
+        return μ_B * (b_B**2 + b_B * activate(U, K_AB) * inhibit(E, K_EB) - B)
     elif z == 4:
-        return b_C + Hill(D, K_DA) - μ_C * C
+        return μ_C * (b_C**2 + b_C * inhibit(D, K_DA) - C)
     elif z == 5:
-        return b_D + Hill_inv(V, K_BD/K_2) - μ_D * D
+        return μ_D * (b_D**2 + b_D * activate(V, K_BD) - D)
     elif z == 6:
-        return b_E + Hill(C, (1+  (Atc**n_Atc)/K_d) * K_CE) * Hill(D, K_DA) * Hill_inv(E, K_EE) - μ_E * E
+        K_CE_star = K_CE * inhibit(aTc, K_aTc, n_aTc)
+        return μ_E * (b_E**2 + b_E * inhibit(C, K_CE_star) * inhibit(F, K_FE) * activate(E, K_EE) - E)
     elif z == 7:
-        return b_F + Hill_inv(V, K_BD/K_2) - μ_F * F
+        return μ_F * (b_F**2 + b_F * activate(V, K_BD) - F)
     elif z == 8:
-        return -μ_Atc * Atc
+        return -μ_aTc * aTc
     else:
         assert "Wrong number of species"

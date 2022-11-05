@@ -27,7 +27,7 @@ def FitzHugh_Nagumo(c, t, f_args):
 
 def FitzHugh_Nagumo_steady_state(b, gamma, mu, init_u=1.0, it=100):
     def F(u):
-        return u * u * u - (mu - (b / gamma)) * u 
+        return u * u * u - (mu - (b / gamma)) * u
 
     def F_prime(u):
         return 3.0 * u * u - (mu - (b / gamma))
@@ -66,6 +66,7 @@ def Koch_Meinhardt(c, t, f_args):
     return np.stack((fu, fv))
 
 
+
 #  $\partial_t u = D_u (\partial_x^2 + \partial_y^2)u + A - (B+1)u + u^2v$
 #  $\partial_t v = D_v (\partial_x^2 + \partial_y^2)v + Bu - u^2 v$
 @numba.jit(nopython=True)
@@ -81,37 +82,40 @@ def Brusselator(c, t, f_args):
 
 @numba.jit(nopython=True)
 def Circuit_3954(c, t, f_args):
-    (b_A, b_B, b_C, b_D, b_E, b_F, 
-    n_Atc,
-    K_1, K_2, K_d,
-    K_AB, K_BD, K_CE, K_DA, K_EB, K_EE,
-    μ_U, μ_V, μ_A, μ_B, μ_C, μ_D, μ_E, μ_F, μ_Atc) =  f_args
+    (b_A, b_B, b_C, b_D, b_E, b_F,
+    n_aTc,
+    K_AB, K_BD, K_CE, K_DA, K_EB, K_EE, K_FE, K_aTc,
+    μ_U, μ_V, μ_B, μ_C, μ_D, μ_E, μ_F, μ_aTc) =  f_args
 
-    u = c[0, :, :]
-    v = c[1, :, :]
+    U = c[0, :, :]
+    V = c[1, :, :]
     A = c[2, :, :]
     B = c[3, :, :]
     C = c[4, :, :]
     D = c[5, :, :]
     E = c[6, :, :]
     F = c[7, :, :]
-    Atc = c[8, :, :]
+    aTc = c[8, :, :]
 
-    def Hill(x, capacity, n=2):
-        return 1/(1 + (x/capacity)**n)
-        
-    def Hill_inv(x, capacity, n=2):
-        return 1/(1 + (capacity/x)**n)
+    def activate(Concentration, K, power=2):
+            act = 1 / (1 + (K / (Concentration + 1e-20)) ** power)
+            return act
 
-    fU = A - μ_U * U 
+    def inhibit(Concentration, K, power=2):
+        inh = 1 / (1 + (Concentration / (K + 1e-20)) ** power)
+        return inh
+
+    K_CE_star = K_CE * inhibit(aTc, K_aTc, n_aTc)
+
+    fU = A - μ_U * U
     fV = B - μ_V * V
-    fA = b_A + Hill(D, K_DA) - μ_A * A
-    fB = b_B + Hill_inv(U, K_AB/K_1) * Hill(E, K_EB) - μ_B * B
-    fC = b_C + Hill(D, K_DA) - μ_C * C
-    fD = b_D + Hill_inv(V, K_BD/K_2) - μ_D * D
-    fE = b_E + Hill(C, (1+  (Atc**n_Atc)/K_d) * K_CE) * Hill(D, K_DA) * Hill_inv(E, K_EE) - μ_E * E
-    fF = b_F + Hill_inv(V, K_BD/K_2) - μ_F * F
-    fAtc = -μ_Atc * Atc
+    fA = b_A**2 + b_A * inhibit(D, K_DA) - A
+    fB = μ_B * (b_B**2 + b_B * activate(U, K_AB) * inhibit(E, K_EB) - B)
+    fC = μ_C * (b_C**2 + b_C * inhibit(D, K_DA) - C)
+    fD = μ_D * (b_D**2 + b_D * activate(V, K_BD) - D)
+    fE = μ_E * (b_E**2 + b_E * inhibit(C, K_CE_star) * inhibit(F, K_FE) * activate(E, K_EE) - E)
+    fF = μ_F * (b_F**2 + b_F * activate(V, K_BD) - F)
+    faTc = -μ_aTc * aTc
 
-    return np.stack((fU, fV, fA, fB, fC, fD, fE, fF, fAtc))
+    return np.stack((fU, fV, fA, fB, fC, fD, fE, fF, faTc))
 
